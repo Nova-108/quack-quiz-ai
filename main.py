@@ -52,14 +52,14 @@ Return ONLY a valid JSON object:
 }
 """
 
-# Update the model configuration in main.py
+# Change the model names in main.py to this:
 model = genai.GenerativeModel(
-    model_name="gemini-2.5-flash", 
+    model_name="gemini-flash-latest", 
     system_instruction=engine_instructions, 
     generation_config={"response_mime_type": "application/json"}
 )
 
-validator_model = genai.GenerativeModel(model_name="gemini-2.5-flash")
+validator_model = genai.GenerativeModel(model_name="gemini-flash-latest")
 
 # --- HTML Routes ---
 @app.get("/")
@@ -124,28 +124,18 @@ def generate_quiz(req: TopicRequest):
     try:
         prompt = f"Generate a reverse quiz for the topic: {req.topic}"
         response = model.generate_content(prompt)
-        
-        # 1. Get the raw text
         raw_text = response.text.strip()
         
-        # 2. STRIP MARKDOWN (The "Cleaning" Step)
-        # This removes ```json and ``` if the AI accidentally adds them
-        if "```" in raw_text:
-            # Split by backticks and take the part inside
-            parts = raw_text.split("```")
-            for part in parts:
-                # Look for the part that looks like JSON (starts with {)
-                if "{" in part:
-                    raw_text = part.replace("json", "").strip()
-                    break
-
-        # 3. Final Parse
-        return json.loads(raw_text)
-        
+        # Robust Markdown Cleaning
+        if "```json" in raw_text:
+            raw_text = raw_text.split("```json")[1].split("```")[0]
+        elif "```" in raw_text:
+            raw_text = raw_text.split("```")[1].split("```")[0]
+            
+        return json.loads(raw_text.strip())
     except Exception as e:
-        # This print will show up in your Render "Logs" tab so we can see the real error
-        print(f"DEBUG ERROR: {str(e)} | RAW AI TEXT: {response.text if 'response' in locals() else 'No Response'}")
-        raise HTTPException(status_code=500, detail=f"AI Error: {str(e)}")
+        print(f"AI Gen Error: {e}")
+        raise HTTPException(status_code=500, detail="AI Generation Error")
 
 @app.post("/api/validate_guess")
 def validate_guess(req: ValidationRequest, db: Session = Depends(get_db)):
