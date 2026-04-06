@@ -1,6 +1,6 @@
 import os
 import json
-from fastapi import FastAPI, Depends, HTTPException, status, Header
+from fastapi import FastAPI, Depends, HTTPException, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 import google.generativeai as genai
 from dotenv import load_dotenv
 from passlib.context import CryptContext
-from database import get_db, User, QuizHistory
+from database import get_db, User
 
 # --- Security Configuration ---
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -41,7 +41,7 @@ ROLE: You are the "Reverse Quiz Engine."
 MODE: JSON-ONLY Output.
 CORE LOGIC: 
 1. When given a TOPIC, generate a specific FACT and a cryptic HINT.
-2. The goal is for the user to guess the QUESTION.
+2. The goal is for the user to guess the underlying CONCEPT or QUESTION.
 3. Provide the ANSWER_KEY (the core concept) for validation.
 OUTPUT FORMAT:
 Return ONLY a valid JSON object:
@@ -52,12 +52,13 @@ Return ONLY a valid JSON object:
 }
 """
 
+# Using gemini-1.5-flash for stability
 model = genai.GenerativeModel(
-    model_name="gemini-2.5-flash", 
+    model_name="gemini-1.5-flash", 
     system_instruction=engine_instructions, 
     generation_config={"response_mime_type": "application/json"}
 )
-validator_model = genai.GenerativeModel(model_name="gemini-2.5-flash")
+validator_model = genai.GenerativeModel(model_name="gemini-1.5-flash")
 
 # --- HTML Routes ---
 @app.get("/")
@@ -74,17 +75,14 @@ def read_admin():
 
 # --- Security Middleware ---
 def verify_admin(x_user_id: str = Header(None), db: Session = Depends(get_db)):
-    # 1. Handle missing header or "null" string from LocalStorage
     if not x_user_id or x_user_id == "null":
         raise HTTPException(status_code=401, detail="Unauthorized: No valid session")
     
-    # 2. Convert ID to integer safely
     try:
         safe_user_id = int(x_user_id)
     except ValueError:
         raise HTTPException(status_code=401, detail="Unauthorized: Invalid ID format")
         
-    # 3. Verify Admin Status
     user = db.query(User).filter(User.id == safe_user_id).first()
     if not user or not user.is_admin:
         raise HTTPException(status_code=403, detail="Forbidden: Admin access required")
@@ -98,8 +96,6 @@ def register_user(req: AuthRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Username already registered")
     
     hashed_password = pwd_context.hash(req.password)
-    
-    # ADMIN BACKDOOR: Registering with name 'admin' grants rights
     is_new_user_admin = True if req.username.lower() == "admin" else False
     
     new_user = User(username=req.username, password=hashed_password, is_admin=is_new_user_admin)
@@ -129,29 +125,25 @@ def generate_quiz(req: TopicRequest):
         response = model.generate_content(prompt)
         raw_text = response.text.strip()
         
-        # Clean markdown tags if present
-        if raw_text.startswith("```json"):
-            raw_text = raw_text[7:]
-        elif raw_text.startswith("```"):
-            raw_text = raw_text[3:]
-        if raw_text.endswith("```"):
-            raw_text = raw_text[:-3]
+        # Robust Markdown Cleaning
+        if "```json" in raw_text:
+            raw_text = raw_text.split("```json")[1].split("```")[0]
+        elif "```" in raw_text:
+            raw_text = raw_text.split("```")[1].split("```")[0]
             
         return json.loads(raw_text.strip())
     except Exception as e:
+        print(f"AI Gen Error: {e}")
         raise HTTPException(status_code=500, detail="AI Generation Error")
-
-# --- Find the validate_guess function in main.py and replace it with this: ---
 
 @app.post("/api/validate_guess")
 def validate_guess(req: ValidationRequest, db: Session = Depends(get_db)):
     try:
-        # We tell the AI to be flexible with case and minor typos
         prompt = (
-            f"The correct concept is: '{req.answer_key}'.\n"
-            f"The user guessed: '{req.user_guess}'.\n"
+            f"Correct Concept: '{req.answer_key}'.\n"
+            f"User Guess: '{req.user_guess}'.\n"
             "Is the user's guess conceptually the same? "
-            "Ignore capitalization, extra spaces, or minor typos. "
+            "BE LENIENT. Ignore capitalization, extra spaces, or minor typos. "
             "Reply with ONLY 'True' or 'False'."
         )
         response = validator_model.generate_content(prompt)
@@ -165,6 +157,7 @@ def validate_guess(req: ValidationRequest, db: Session = Depends(get_db)):
         
         return {"is_correct": False, "new_score": user.total_score if user else 0}
     except Exception as e:
+        print(f"AI Val Error: {e}")
         raise HTTPException(status_code=500, detail="AI Validation Error")
 
 # --- SECURED ADMIN ROUTES ---
