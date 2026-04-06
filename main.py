@@ -124,18 +124,28 @@ def generate_quiz(req: TopicRequest):
     try:
         prompt = f"Generate a reverse quiz for the topic: {req.topic}"
         response = model.generate_content(prompt)
+        
+        # 1. Get the raw text
         raw_text = response.text.strip()
         
-        # Robust Markdown Cleaning
-        if "```json" in raw_text:
-            raw_text = raw_text.split("```json")[1].split("```")[0]
-        elif "```" in raw_text:
-            raw_text = raw_text.split("```")[1].split("```")[0]
-            
-        return json.loads(raw_text.strip())
+        # 2. STRIP MARKDOWN (The "Cleaning" Step)
+        # This removes ```json and ``` if the AI accidentally adds them
+        if "```" in raw_text:
+            # Split by backticks and take the part inside
+            parts = raw_text.split("```")
+            for part in parts:
+                # Look for the part that looks like JSON (starts with {)
+                if "{" in part:
+                    raw_text = part.replace("json", "").strip()
+                    break
+
+        # 3. Final Parse
+        return json.loads(raw_text)
+        
     except Exception as e:
-        print(f"AI Gen Error: {e}")
-        raise HTTPException(status_code=500, detail="AI Generation Error")
+        # This print will show up in your Render "Logs" tab so we can see the real error
+        print(f"DEBUG ERROR: {str(e)} | RAW AI TEXT: {response.text if 'response' in locals() else 'No Response'}")
+        raise HTTPException(status_code=500, detail=f"AI Error: {str(e)}")
 
 @app.post("/api/validate_guess")
 def validate_guess(req: ValidationRequest, db: Session = Depends(get_db)):
