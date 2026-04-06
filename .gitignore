@@ -1,0 +1,25 @@
+# Environments
+venv/
+.env
+pyvenv.cfg
+.python-version
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.pdm-build/
+
+# Database
+*.db
+*.sqlite3
+quiz_app.db
+
+# --- IDE & System Junk ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
