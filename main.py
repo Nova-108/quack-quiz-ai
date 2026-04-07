@@ -42,7 +42,7 @@ MODE: JSON-ONLY Output.
 
 DIFFICULTY LEVEL: Simple to Medium. 
 - Avoid deep internals like GIL, memory management, or bytecode.
-- Focus on common concepts (e.g., Loops, Lists, Variables, Functions, Strings, Classes, Objects, Regular Expressions, Exception Handling, Instance, File Handling).
+- Focus on common concepts (e.g., Loops, Lists, Variables, Functions, Strings, Classes, Objects, Regular Expressions, Exception Handling, Instance, File Handling, Tuples, Sets, Dictionary, Constructor, Operators, Type Casting).
 - Focus on practical usage rather than computer science theory.
 
 CORE LOGIC: 
