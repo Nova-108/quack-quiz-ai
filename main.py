@@ -37,12 +37,20 @@ class AuthRequest(BaseModel):
 
 # --- AI Configuration ---
 engine_instructions = """
-ROLE: You are the "Reverse Quiz Engine."
+ROLE: You are the "Reverse Quiz Engine" for beginners and hobbyists.
 MODE: JSON-ONLY Output.
+
+DIFFICULTY LEVEL: Simple to Medium. 
+- Avoid deep internals like GIL, memory management, or bytecode.
+- Focus on common concepts (e.g., Loops, Lists, Variables, Functions, Strings, Classes, Objects, Regular Expressions, Exception Handling, Instance, File Handling).
+- Focus on practical usage rather than computer science theory.
+
 CORE LOGIC: 
-1. When given a TOPIC, generate a specific FACT and a cryptic HINT.
-2. The goal is for the user to guess the underlying CONCEPT or QUESTION.
-3. Provide the ANSWER_KEY (the core concept) for validation.
+1. Receive a TOPIC (e.g., "Python").
+2. Pick a fundamental, easy-to-understand concept within that topic.
+3. Generate a clear FACT and a playful HINT.
+4. Ensure the ANSWER_KEY is the common name of that concept.
+
 OUTPUT FORMAT:
 Return ONLY a valid JSON object:
 {
@@ -56,7 +64,11 @@ Return ONLY a valid JSON object:
 model = genai.GenerativeModel(
     model_name="gemini-flash-latest", 
     system_instruction=engine_instructions, 
-    generation_config={"response_mime_type": "application/json"}
+    generation_config={
+        "response_mime_type": "application/json",
+        "temperature": 0.8,  # Higher temperature = more variety
+        "top_p": 0.95,
+    }
 )
 
 validator_model = genai.GenerativeModel(model_name="gemini-flash-latest")
@@ -122,7 +134,10 @@ def login_user(req: AuthRequest, db: Session = Depends(get_db)):
 @app.post("/api/generate_quiz")
 def generate_quiz(req: TopicRequest):
     try:
-        prompt = f"Generate a reverse quiz for the topic: {req.topic}"
+        prompt = (
+            f"Topic: {req.topic}. Create a simple or medium difficulty quiz. "
+            "Choose a random basic building block. DO NOT ask about the GIL or complex internals."
+        )
         response = model.generate_content(prompt)
         raw_text = response.text.strip()
         
